@@ -1,0 +1,66 @@
+FROM nvidia/cuda:10.0-cudnn7-devel-ubuntu18.04
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        g++ \
+        make \
+        automake \
+        autoconf \
+        bzip2 \
+        unzip \
+        wget \
+        sox \
+        libtool \
+        git \
+        subversion \
+        python2.7 \
+        python3 \
+        zlib1g-dev \
+        gfortran \
+        ca-certificates \
+        patch \
+        ffmpeg \
+	vim && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN ln -s /usr/bin/python2.7 /usr/bin/python
+
+RUN git clone --depth 1 https://github.com/kaldi-asr/kaldi.git /opt/kaldi && \
+    cd /opt/kaldi/tools && \
+    ./extras/install_mkl.sh && \
+    make -j $(nproc) && \
+    cd /opt/kaldi/src && \
+    ./configure --shared --use-cuda && \
+    make depend -j $(nproc) && \
+    make -j $(nproc) && \
+    find /opt/kaldi  -type f \( -name "*.o" -o -name "*.la" -o -name "*.a" \) -exec rm {} \; && \
+    find /opt/intel -type f -name "*.a" -exec rm {} \; && \
+    find /opt/intel -type f -regex '.*\(_mc.?\|_mic\|_thread\|_ilp64\)\.so' -exec rm {} \; && \
+    rm -rf /opt/kaldi/.git
+
+# make sox compat with mp3 as commonvoice is in mp3 format
+RUN apt update
+RUN apt install -y libsox-fmt-mp3 gawk
+
+# install SRILM
+WORKDIR /opt/kaldi/tools
+RUN ./install_srilm.sh alp alp alp@alp.com
+
+# install python3.8
+WORKDIR /root
+RUN apt install software-properties-common -y
+RUN add-apt-repository ppa:deadsnakes/ppa
+RUN apt update
+RUN apt install -y python3.8
+
+# install pip for python3.8
+RUN apt update
+RUN apt install -y curl python3.8-distutils
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+RUN python3.8 get-pip.py
+
+# install python dependencies
+RUN pip3.8 install pandas tqdm
+
+# back to workdir
+WORKDIR /opt/kaldi
